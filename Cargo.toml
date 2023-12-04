@@ -7,6 +7,9 @@ edition = "2021"
 
 [dependencies]
 miette = "5.10.0"
-serde = "1.0.193"
+serde = {version="1.0.193", features=["derive"]}
 thiserror = "1.0.50"
 rustyline = "12.0.0"
+nom_locate = "4.2.0"
+nom-supreme = "0.8.0"
+nom = "7.1.3"

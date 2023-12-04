@@ -1,3 +1,7 @@
+mod sql_analyzer;
+mod executor;
+mod storage;
+
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
 use rustyline::{Editor, Result};
