@@ -239,10 +239,10 @@ impl<'a> Parse<'a> for InsertStatement {
 }
 // I was a test hater earlier but may as well cover the basics...
 #[cfg(test)]
-mod tests {
+mod test_create_stmt {
     use super::*;
     #[test]
-    fn test_create_stmt() {
+    fn test1() {
         let expected = CreateStatement {
             table: "foo".into(),
             columns: vec![
@@ -269,7 +269,11 @@ mod tests {
             expected
         )
     }
+}
 
+#[cfg(test)]
+mod test_insert_stmt {
+    use super::*;
     #[test]
     fn test_insert_stmt() {
         let expected = InsertStatement {
