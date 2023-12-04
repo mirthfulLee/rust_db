@@ -6,10 +6,12 @@ use nom_locate::LocatedSpan;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while, take_while1},
-    character::complete::{alphanumeric1, char, i32, multispace0, multispace1, one_of},
+    character::complete::{
+        alphanumeric1, char, i32 as int32, multispace0, multispace1, none_of, one_of,
+    },
     combinator::{cut, map, opt, value},
     error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
-    multi::{separated_list0, separated_list1},
+    multi::{many0, separated_list0, separated_list1},
     number::complete::double,
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
     AsChar, Err, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, Parser,
@@ -34,7 +36,11 @@ pub fn comma_sep<'a, O, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResult<'a, Vec<
 where
     F: FnMut(Span<'a>) -> ParseResult<'a, O>,
 {
-    separated_list1(tuple((multispace0, char(','), multispace0)), f)
+    delimited(
+        multispace0,
+        separated_list1(tuple((multispace0, char(','), multispace0)), f),
+        multispace0,
+    )
 }
 
 /// Implement the parse function to more easily convert a span into a sql
@@ -110,8 +116,12 @@ fn column_definitions(input: Span<'_>) -> ParseResult<'_, Vec<Column>> {
     context(
         "Column Definitions",
         map(
-            tuple((char('('), comma_sep(Column::parse), char(')'))),
-            |(_, cols, _)| cols,
+            delimited(
+                tuple((multispace0, char('('))),
+                comma_sep(Column::parse),
+                tuple((multispace0, char(')'))),
+            ),
+            |cols| cols,
         ),
     )(input)
 }
@@ -147,13 +157,20 @@ pub enum SqlValue {
     Int(i32),
 }
 
+impl<'a> Parse<'a> for String {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        map(
+            delimited(char('\''), many0(none_of("\'")), char('\'')),
+            |chars| String::from_iter(chars.iter()),
+        )(input)
+    }
+}
+
 impl<'a> Parse<'a> for SqlValue {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         alt((
-            map(alphanumeric1, |s: Span<'a>| {
-                Self::Int(s.to_string().parse::<i32>().unwrap())
-            }),
-            map(alphanumeric1, |s: Span<'a>| Self::String(s.to_string())),
+            map(int32, |i| Self::Int(i)),
+            map(String::parse, |s| Self::String(s)),
         ))(input)
     }
 }
@@ -193,19 +210,23 @@ impl<'a> Parse<'a> for InsertStatement {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         map(
             tuple((
-                delimited(
+                preceded(
                     // table name
                     tuple((
-                        multispace1,
+                        multispace0,
                         tag_no_case("insert"),
                         multispace1,
                         tag_no_case("into"),
+                        multispace1,
                     )),
                     identifier.context("Table Name"),
-                    tuple((multispace1, tag_no_case("values"))),
                 ),
-                opt(comma_sep(identifier)),
-                RowValue::parse,
+                opt(delimited(
+                    tuple((multispace0, char('('))),
+                    comma_sep(identifier),
+                    tuple((multispace0, char(')'))),
+                )),
+                preceded(tuple((multispace0, tag_no_case("values"))), RowValue::parse),
             ))
             .context("Create Table"),
             |(table, columns, values)| Self {
@@ -263,10 +284,9 @@ mod tests {
             },
         };
         let parse_result =
-            InsertStatement::parse_from_raw("INSERT INTO foo values ('abc', 123, 'def')")
+            InsertStatement::parse_from_raw("INSERT INTO foo VALUES ('abc', 123, 'def')")
                 .unwrap()
                 .1;
-        print!("{:?}", parse_result);
         assert_eq!(parse_result, expected)
     }
 }
