@@ -27,7 +27,7 @@ pub type ParseResult<'a, T> = IResult<Span<'a>, T>;
 
 /// Parse a unquoted sql identifier
 pub(crate) fn identifier(i: Span) -> ParseResult<String> {
-    map(take_while1(|c: char| c.is_alphanumeric()), |s: Span| {
+    map(take_while1(|c: char| c.is_alphanumeric() || c == '_'), |s: Span| {
         s.fragment().to_string()
     })(i)
 }
@@ -285,6 +285,30 @@ mod tests {
         };
         let parse_result =
             InsertStatement::parse_from_raw("INSERT INTO foo VALUES ('abc', 123, 'def')")
+                .unwrap()
+                .1;
+        assert_eq!(parse_result, expected)
+    }
+
+    #[test]
+    fn test_insert_stmt2() {
+        let expected = InsertStatement {
+            table: String::from("foo"),
+            columns: Some(vec![
+                String::from("name"),
+                String::from("id"),
+                String::from("value")
+            ]),
+            values: RowValue {
+                values: vec![
+                    SqlValue::String(String::from("abc")),
+                    SqlValue::Int(123),
+                    SqlValue::String(String::from("def")),
+                ],
+            },
+        };
+        let parse_result =
+            InsertStatement::parse_from_raw("INSERT INTO foo (name, id, value) VALUES ('abc', 123, 'def')")
                 .unwrap()
                 .1;
         assert_eq!(parse_result, expected)
