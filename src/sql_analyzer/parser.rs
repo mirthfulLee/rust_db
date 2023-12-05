@@ -5,21 +5,15 @@ use miette::GraphicalReportHandler;
 // ParserExt is mostly for adding `.context` on calls to identifier to say what kind of identifier we want
 use nom::{
     branch::alt,
-    Finish,
-    bytes::complete::{ tag, take_while1},
-    character::complete::{
-        char, i32 as int32, multispace0, multispace1, none_of,
-    },
+    bytes::complete::{tag, take_while1},
+    character::complete::{char, i32 as int32, multispace0, multispace1, none_of},
     combinator::{all_consuming, cut, map, opt},
     error::context,
     multi::{many0, separated_list1},
     sequence::{delimited, preceded, separated_pair, tuple},
+    Finish,
 };
-use nom_supreme::{
-    tag::complete::tag_no_case,
-    ParserExt,
-};
-
+use nom_supreme::{tag::complete::tag_no_case, ParserExt};
 
 /// Parse a unquoted sql identifier
 fn identifier(i: Span) -> ParseResult<String> {
@@ -166,7 +160,6 @@ impl<'a> Parse<'a> for DropStatement {
     }
 }
 
-
 /// String value in SQL statement should be wrapped with apostrophes
 impl<'a> Parse<'a> for String {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -188,7 +181,6 @@ impl<'a> Parse<'a> for SqlValue {
         )(input)
     }
 }
-
 
 impl<'a> Parse<'a> for RowValue {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -250,7 +242,6 @@ impl<'a> Parse<'a> for InsertStatement {
         )(input)
     }
 }
-
 
 impl<'a> Parse<'a> for CmpOpt {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -377,6 +368,26 @@ impl<'a> Parse<'a> for SelectStatement {
     }
 }
 
+impl<'a> Parse<'a> for DeleteStatement {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        context(
+            "Delete Statement",
+            map(
+                preceded(
+                    tuple((
+                        multispace0,
+                        tag_no_case("delete"),
+                        multispace1,
+                        tag_no_case("from"),
+                        multispace1
+                    )),
+                    cut(tuple((identifier, opt(WhereConstraint::parse)))),
+                ),
+                |(table, constraints)| Self { table, constraints },
+            ),
+        )(input)
+    }
+}
 
 impl<'a> Parse<'a> for SetItem {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -421,7 +432,6 @@ impl<'a> Parse<'a> for UpdateStatement {
     }
 }
 
-
 impl<'a> Parse<'a> for SqlQuery {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         let (rest, (query, _, _, _)) = tuple((
@@ -430,6 +440,7 @@ impl<'a> Parse<'a> for SqlQuery {
                 map(SelectStatement::parse, SqlQuery::Select),
                 map(InsertStatement::parse, SqlQuery::Insert),
                 map(CreateStatement::parse, SqlQuery::Create),
+                map(DeleteStatement::parse, SqlQuery::Delete),
                 map(DropStatement::parse, SqlQuery::Drop),
                 map(UpdateStatement::parse, SqlQuery::Update),
             )),
@@ -445,7 +456,7 @@ impl<'a> Parse<'a> for SqlQuery {
 mod test_create_stmt {
     use super::*;
     #[test]
-    fn test1() {
+    fn test_create_stmt1() {
         let expected = CreateStatement {
             table: "foo".into(),
             columns: vec![
@@ -478,7 +489,7 @@ mod test_create_stmt {
 mod test_drop_stmt {
     use super::*;
     #[test]
-    fn test1() {
+    fn test_drop_stmt1() {
         let expected = DropStatement {
             table: "foo".into(),
         };
@@ -577,6 +588,36 @@ mod test_select_stmt {
         };
         let parse_result = SelectStatement::parse_from_raw(
             "SELECT abc, value, * from foo WHERE bar = 123 AND abc <= 'def'",
+        )
+        .unwrap()
+        .1;
+        assert_eq!(parse_result, expected)
+    }
+}
+
+#[cfg(test)]
+mod test_delete_stmt {
+    use super::*;
+    #[test]
+    fn test_select_stmt2() {
+        let expected = DeleteStatement {
+            table: String::from("foo"),
+            constraints: Some(WhereConstraint::Bin(
+                Box::new(WhereConstraint::Constrait(
+                    String::from("bar"),
+                    CmpOpt::Eq,
+                    SqlValue::Int(123),
+                )),
+                BoolOpt::And,
+                Box::new(WhereConstraint::Constrait(
+                    String::from("abc"),
+                    CmpOpt::Le,
+                    SqlValue::String(String::from("def")),
+                )),
+            )),
+        };
+        let parse_result = DeleteStatement::parse_from_raw(
+            "DELETE FROM foo WHERE bar = 123 AND abc <= 'def'",
         )
         .unwrap()
         .1;

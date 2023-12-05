@@ -101,6 +101,12 @@ pub struct SelectStatement {
     pub constraints: Option<WhereConstraint>,
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct DeleteStatement {
+    pub table: String,
+    pub constraints: Option<WhereConstraint>,
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct UpdateStatement {
     pub table: String,
@@ -113,6 +119,7 @@ pub enum SqlQuery {
     Select(SelectStatement),
     Insert(InsertStatement),
     Create(CreateStatement),
+    Delete(DeleteStatement),
     Drop(DropStatement),
     Update(UpdateStatement),
 }
