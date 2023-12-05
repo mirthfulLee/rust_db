@@ -426,10 +426,68 @@ impl<'a> Parse<'a> for SelectStatement {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct SetItem {
+    column: String,
+    value: SqlValue,
+}
+
+impl<'a> Parse<'a> for SetItem {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        context(
+            "Set Item",
+            map(
+                separated_pair(
+                    identifier,
+                    tuple((multispace0, char('='), multispace0)),
+                    SqlValue::parse,
+                ),
+                |(column, value)| Self { column, value },
+            ),
+        )(input)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct UpdateStatement {
+    pub table: String,
+    pub sets: Vec<SetItem>,
+    pub constraints: Option<WhereConstraint>,
+}
+
+impl<'a> Parse<'a> for UpdateStatement {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        context(
+            "Update Statement",
+            map(
+                tuple((
+                    multispace0,
+                    tag_no_case("update"),
+                    multispace1,
+                    identifier,
+                    multispace1,
+                    tag_no_case("set"),
+                    multispace0,
+                    comma_sep(SetItem::parse),
+                    multispace0,
+                    opt(WhereConstraint::parse),
+                )),
+                |(_, _, _, table, _, _, _, sets, _, constraints)| Self {
+                    table,
+                    sets,
+                    constraints,
+                },
+            ),
+        )(input)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum SqlQuery {
     Select(SelectStatement),
     Insert(InsertStatement),
     Create(CreateStatement),
+    Drop(DropStatement),
+    Update(UpdateStatement),
 }
 
 impl<'a> Parse<'a> for SqlQuery {
@@ -444,6 +502,8 @@ impl<'a> Parse<'a> for SqlQuery {
                         map(SelectStatement::parse, SqlQuery::Select),
                         map(InsertStatement::parse, SqlQuery::Insert),
                         map(CreateStatement::parse, SqlQuery::Create),
+                        map(DropStatement::parse, SqlQuery::Drop),
+                        map(UpdateStatement::parse, SqlQuery::Update),
                     )),
                     multispace0,
                     char(';'),
@@ -494,14 +554,10 @@ mod test_drop_stmt {
     #[test]
     fn test1() {
         let expected = DropStatement {
-            table: "foo".into()
+            table: "foo".into(),
         };
         assert_eq!(
-            DropStatement::parse_from_raw(
-                "DROP TABLE foo"
-            )
-            .unwrap()
-            .1,
+            DropStatement::parse_from_raw("DROP TABLE foo").unwrap().1,
             expected
         )
     }
