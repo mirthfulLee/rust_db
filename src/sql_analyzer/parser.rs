@@ -27,9 +27,10 @@ pub type ParseResult<'a, T> = IResult<Span<'a>, T>;
 
 /// Parse a unquoted sql identifier
 pub(crate) fn identifier(i: Span) -> ParseResult<String> {
-    map(take_while1(|c: char| c.is_alphanumeric() || c == '_'), |s: Span| {
-        s.fragment().to_string()
-    })(i)
+    map(
+        take_while1(|c: char| c.is_alphanumeric() || c == '_'),
+        |s: Span| s.fragment().to_string(),
+    )(i)
 }
 
 pub fn comma_sep<'a, O, F>(f: F) -> impl FnMut(Span<'a>) -> ParseResult<'a, Vec<O>>
@@ -206,6 +207,17 @@ pub struct InsertStatement {
     pub values: RowValue,
 }
 
+fn insert_columns<'a>(input: Span<'a>) -> ParseResult<'a, Vec<String>> {
+    context(
+        "Insert Columns",
+        delimited(
+            tuple((multispace0, char('('))),
+            comma_sep(identifier),
+            tuple((multispace0, char(')'))),
+        ),
+    )(input)
+}
+
 impl<'a> Parse<'a> for InsertStatement {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         map(
@@ -221,11 +233,7 @@ impl<'a> Parse<'a> for InsertStatement {
                     )),
                     identifier.context("Table Name"),
                 ),
-                opt(delimited(
-                    tuple((multispace0, char('('))),
-                    comma_sep(identifier),
-                    tuple((multispace0, char(')'))),
-                )),
+                opt(insert_columns),
                 preceded(tuple((multispace0, tag_no_case("values"))), RowValue::parse),
             ))
             .context("Create Table"),
@@ -237,7 +245,142 @@ impl<'a> Parse<'a> for InsertStatement {
         )(input)
     }
 }
-// I was a test hater earlier but may as well cover the basics...
+
+/// Compare Operators
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum CmpOpt {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl<'a> Parse<'a> for CmpOpt {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        alt((
+            map(tag("="), |_| Self::Eq),
+            map(tag("<>"), |_| Self::Ne),
+            map(tag("<"), |_| Self::Lt),
+            map(tag("<="), |_| Self::Le),
+            map(tag(">"), |_| Self::Gt),
+            map(tag(">="), |_| Self::Ge),
+        ))(input)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum BoolOpt {
+    And,
+    Or,
+    Not,
+}
+
+impl<'a> Parse<'a> for BoolOpt {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        alt((
+            map(tag_no_case("and"), |_| Self::And),
+            map(tag_no_case("or"), |_| Self::Or),
+            // map(tag_no_case("not"), |_| Self::Not),
+        ))(input)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum WhereConstraint {
+    Bin(Box<WhereConstraint>, BoolOpt, Box<WhereConstraint>),
+    Not(Box<WhereConstraint>),
+    // column, cmp, value
+    Constrait(String, CmpOpt, SqlValue),
+}
+
+impl<'a> WhereConstraint {
+    fn parse_constrait(input: Span<'a>) -> ParseResult<'a, Self> {
+        map(
+            tuple((
+                identifier,
+                multispace0,
+                CmpOpt::parse,
+                multispace0,
+                SqlValue::parse,
+            )),
+            |(column, _, op, _, value)| Self::Constrait(column, op, value),
+        )(input)
+    }
+
+    fn parse_bin(input: Span<'a>) -> ParseResult<'a, Self> {
+        map(
+            tuple((
+                Self::parse,
+                multispace1,
+                BoolOpt::parse,
+                multispace1,
+                Self::parse,
+            )),
+            |(cons_l, _, opt, _, cons_r)| Self::Bin(Box::new(cons_l), opt, Box::new(cons_r)),
+        )(input)
+    }
+
+    fn parse_not(input: Span<'a>) -> ParseResult<'a, Self> {
+        map(
+            preceded(
+                tuple((multispace0, tag_no_case("not"), multispace0)),
+                Self::parse,
+            ),
+            |cons| Self::Not(Box::new(cons)),
+        )(input)
+    }
+}
+
+impl<'a> Parse<'a> for WhereConstraint {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        alt((Self::parse_constrait, Self::parse_not, Self::parse_bin))(input)
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct SelectStatement {
+    table: String,
+    columns: Vec<String>,
+    constraints: Option<WhereConstraint>,
+}
+
+fn result_columns<'a>(input: Span<'a>) -> ParseResult<'a, Vec<String>> {
+    context(
+        "Result Columns",
+        comma_sep(alt((identifier, map(tag("*"), |_| String::from("*"))))),
+    )(input)
+}
+
+impl<'a> Parse<'a> for SelectStatement {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        context(
+            "Select Statement",
+            map(
+                tuple((
+                    multispace0,
+                    tag_no_case("select"),
+                    multispace1,
+                    result_columns,
+                    multispace1,
+                    tag_no_case("from"),
+                    multispace1,
+                    identifier,
+                    multispace1,
+                    opt(WhereConstraint::parse),
+                    multispace0,
+                )),
+                |(_, _, _, columns, _, _, _, table, _, constraints, _)| Self {
+                    table,
+                    columns,
+                    constraints,
+                },
+            ),
+        )(input)
+    }
+}
+
 #[cfg(test)]
 mod test_create_stmt {
     use super::*;
@@ -301,7 +444,7 @@ mod test_insert_stmt {
             columns: Some(vec![
                 String::from("name"),
                 String::from("id"),
-                String::from("value")
+                String::from("value"),
             ]),
             values: RowValue {
                 values: vec![
@@ -311,10 +454,46 @@ mod test_insert_stmt {
                 ],
             },
         };
-        let parse_result =
-            InsertStatement::parse_from_raw("INSERT INTO foo (name, id, value) VALUES ('abc', 123, 'def')")
-                .unwrap()
-                .1;
+        let parse_result = InsertStatement::parse_from_raw(
+            "INSERT INTO foo (name, id, value) VALUES ('abc', 123, 'def')",
+        )
+        .unwrap()
+        .1;
+        assert_eq!(parse_result, expected)
+    }
+}
+
+#[cfg(test)]
+mod test_select_stmt {
+    use super::*;
+    #[test]
+    fn test_select_stmt1() {
+        let expected = SelectStatement {
+            table: String::from("foo"),
+            columns: vec![
+                String::from("abc"),
+                String::from("value"),
+                String::from("*"),
+            ],
+            constraints: Some(WhereConstraint::Bin(
+                Box::new(WhereConstraint::Constrait(
+                    String::from("bar"),
+                    CmpOpt::Eq,
+                    SqlValue::Int(123),
+                )),
+                BoolOpt::And,
+                Box::new(WhereConstraint::Constrait(
+                    String::from("abc"),
+                    CmpOpt::Le,
+                    SqlValue::String(String::from("def")),
+                )),
+            )),
+        };
+        let parse_result = SelectStatement::parse_from_raw(
+            "SELECT abc, value, * from foo WHERE bar = 123 AND abc <= 'def'",
+        )
+        .unwrap()
+        .1;
         assert_eq!(parse_result, expected)
     }
 }
