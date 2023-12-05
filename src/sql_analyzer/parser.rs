@@ -158,6 +158,30 @@ impl<'a> Parse<'a> for CreateStatement {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct DropStatement {
+    pub table: String,
+}
+
+impl<'a> Parse<'a> for DropStatement {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        map(
+            // table name
+            preceded(
+                tuple((
+                    tag_no_case("drop"),
+                    multispace1,
+                    tag_no_case("table"),
+                    multispace1,
+                )),
+                identifier.context("Table Name"),
+            )
+            .context("Create Table"),
+            |table| Self { table },
+        )(input)
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum SqlValue {
     String(String),
@@ -456,6 +480,25 @@ mod test_create_stmt {
         assert_eq!(
             CreateStatement::parse_from_raw(
                 "CREATE TABLE foo (col1 int, col2 string, col3 string)"
+            )
+            .unwrap()
+            .1,
+            expected
+        )
+    }
+}
+
+#[cfg(test)]
+mod test_drop_stmt {
+    use super::*;
+    #[test]
+    fn test1() {
+        let expected = DropStatement {
+            table: "foo".into()
+        };
+        assert_eq!(
+            DropStatement::parse_from_raw(
+                "DROP TABLE foo"
             )
             .unwrap()
             .1,
