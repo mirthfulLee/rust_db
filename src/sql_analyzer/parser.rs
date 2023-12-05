@@ -16,14 +16,20 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
     AsChar, Err, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, Parser,
 };
-use nom_supreme::{tag::complete::tag_no_case, ParserExt};
+use nom_supreme::{
+    error::{BaseErrorKind, ErrorTree, GenericErrorTree, StackContext},
+    tag::complete::tag_no_case,
+    ParserExt,
+};
 use serde::{Deserialize, Serialize};
 
 // Use nom_locate's LocatedSpan as a wrapper around a string input
 pub type Span<'a> = LocatedSpan<&'a str>;
+
+pub type MyParseError<'a> = ErrorTree<Span<'a>>;
 // the result for all of our parsers, they will have our span type as input and can have any output
 // this will use a default error type but we will change that latter
-pub type ParseResult<'a, T> = IResult<Span<'a>, T>;
+pub type ParseResult<'a, T> = IResult<Span<'a>, T, MyParseError<'a>>;
 
 /// Parse a unquoted sql identifier
 pub(crate) fn identifier(i: Span) -> ParseResult<String> {
@@ -169,10 +175,13 @@ impl<'a> Parse<'a> for String {
 
 impl<'a> Parse<'a> for SqlValue {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
-        alt((
-            map(int32, |i| Self::Int(i)),
-            map(String::parse, |s| Self::String(s)),
-        ))(input)
+        context(
+            "Sql Value",
+            alt((
+                map(int32, |i| Self::Int(i)),
+                map(String::parse, |s| Self::String(s)),
+            )),
+        )(input)
     }
 }
 
@@ -260,12 +269,13 @@ pub enum CmpOpt {
 impl<'a> Parse<'a> for CmpOpt {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         alt((
+            // ATTENTION: 顺序很重要!!!!
             map(tag("="), |_| Self::Eq),
             map(tag("<>"), |_| Self::Ne),
-            map(tag("<"), |_| Self::Lt),
             map(tag("<="), |_| Self::Le),
-            map(tag(">"), |_| Self::Gt),
+            map(tag("<"), |_| Self::Lt),
             map(tag(">="), |_| Self::Ge),
+            map(tag(">"), |_| Self::Gt),
         ))(input)
     }
 }
@@ -299,43 +309,55 @@ impl<'a> WhereConstraint {
     fn parse_constrait(input: Span<'a>) -> ParseResult<'a, Self> {
         map(
             tuple((
+                multispace0,
                 identifier,
                 multispace0,
                 CmpOpt::parse,
                 multispace0,
                 SqlValue::parse,
             )),
-            |(column, _, op, _, value)| Self::Constrait(column, op, value),
+            |(_, column, _, op, _, value)| Self::Constrait(column, op, value),
         )(input)
     }
 
     fn parse_bin(input: Span<'a>) -> ParseResult<'a, Self> {
         map(
             tuple((
-                Self::parse,
+                multispace0,
+                Self::parse_constrait,
                 multispace1,
                 BoolOpt::parse,
-                multispace1,
-                Self::parse,
+                cut(Self::parse_constraits),
             )),
-            |(cons_l, _, opt, _, cons_r)| Self::Bin(Box::new(cons_l), opt, Box::new(cons_r)),
+            |(_, cons_l, _, opt, cons_r)| Self::Bin(Box::new(cons_l), opt, Box::new(cons_r)),
         )(input)
     }
 
     fn parse_not(input: Span<'a>) -> ParseResult<'a, Self> {
         map(
             preceded(
-                tuple((multispace0, tag_no_case("not"), multispace0)),
-                Self::parse,
+                tuple((multispace0, tag_no_case("not"))),
+                cut(Self::parse_constrait),
             ),
             |cons| Self::Not(Box::new(cons)),
         )(input)
+    }
+
+    fn parse_constraits(input: Span<'a>) -> ParseResult<'a, Self> {
+        alt((Self::parse_not, Self::parse_bin, Self::parse_constrait))(input)
     }
 }
 
 impl<'a> Parse<'a> for WhereConstraint {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
-        alt((Self::parse_constrait, Self::parse_not, Self::parse_bin))(input)
+        context(
+            "Where Constraint",
+            preceded(
+                tuple((multispace0, tag_no_case("where"))),
+                // parse_constraint must be the last one in the alt list
+                Self::parse_constraits,
+            ),
+        )(input)
     }
 }
 
@@ -361,23 +383,51 @@ impl<'a> Parse<'a> for SelectStatement {
                 tuple((
                     multispace0,
                     tag_no_case("select"),
-                    multispace1,
-                    result_columns,
-                    multispace1,
-                    tag_no_case("from"),
-                    multispace1,
-                    identifier,
-                    multispace1,
-                    opt(WhereConstraint::parse),
                     multispace0,
+                    result_columns,
+                    multispace0,
+                    tag_no_case("from"),
+                    multispace0,
+                    identifier,
+                    opt(WhereConstraint::parse),
                 )),
-                |(_, _, _, columns, _, _, _, table, _, constraints, _)| Self {
+                |(_, _, _, columns, _, _, _, table, constraints)| Self {
                     table,
                     columns,
                     constraints,
                 },
             ),
         )(input)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum SqlQuery {
+    Select(SelectStatement),
+    Insert(InsertStatement),
+    Create(CreateStatement),
+}
+
+impl<'a> Parse<'a> for SqlQuery {
+    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
+        let (rest, (query, _, _, _)) = context(
+            "Query",
+            preceded(
+                multispace0,
+                tuple((
+                    alt((
+                        // this feels ripe for a derive macro but another time....
+                        map(SelectStatement::parse, SqlQuery::Select),
+                        map(InsertStatement::parse, SqlQuery::Insert),
+                        map(CreateStatement::parse, SqlQuery::Create),
+                    )),
+                    multispace0,
+                    char(';'),
+                    multispace0,
+                )),
+            ),
+        )(input)?;
+        Ok((rest, query))
     }
 }
 
@@ -468,6 +518,17 @@ mod test_select_stmt {
     use super::*;
     #[test]
     fn test_select_stmt1() {
+        let parse_result = SelectStatement::parse_from_raw(
+            "SELECT abc, value, bar FROM foo WHERE bar = 123 AND abc >= 'def'",
+        );
+        match parse_result {
+            Ok(q) => println!("{q:?}"),
+            Err(e) => eprintln!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_select_stmt2() {
         let expected = SelectStatement {
             table: String::from("foo"),
             columns: vec![
