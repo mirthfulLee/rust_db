@@ -657,3 +657,55 @@ mod test_select_stmt {
         assert_eq!(parse_result, expected)
     }
 }
+
+#[cfg(test)]
+mod test_update_stmt {
+    use super::*;
+    #[test]
+    fn test_update_stmt1() {
+        let parse_result = UpdateStatement::parse_from_raw(
+            "UPDATE foo SET abc=123, def='xyz' WHERE abc < 123 AND def = 'def'",
+        );
+        match parse_result {
+            Ok(q) => println!("{q:?}"),
+            Err(e) => eprintln!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_update_stmt2() {
+        let expected = UpdateStatement {
+            table: "foo".into(),
+            sets: vec![
+                SetItem {
+                    column: "abc".into(),
+                    value: SqlValue::Int(123),
+                },
+                SetItem {
+                    column: "def".into(),
+                    value: SqlValue::String("xyz".into()),
+                },
+            ],
+            constraints: Some(WhereConstraint::Bin(
+                Box::new(WhereConstraint::Constrait(
+                    String::from("abc"),
+                    CmpOpt::Lt,
+                    SqlValue::Int(123),
+                )),
+                BoolOpt::And,
+                Box::new(WhereConstraint::Constrait(
+                    String::from("def"),
+                    CmpOpt::Eq,
+                    SqlValue::String(String::from("def")),
+                )),
+            )),
+        };
+
+        let parse_result = UpdateStatement::parse_from_raw(
+            "UPDATE foo SET abc=123, def='xyz' WHERE abc < 123 AND def = 'def'",
+        )
+        .unwrap()
+        .1;
+        assert_eq!(parse_result, expected)
+    }
+}
