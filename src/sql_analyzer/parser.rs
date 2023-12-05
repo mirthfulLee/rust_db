@@ -1,35 +1,25 @@
-use super::errors::{format_parse_error, FormattedError, MyParseError};
+use super::errors::{format_parse_error, FormattedError};
+use super::types::*;
 use miette::GraphicalReportHandler;
-use nom_locate::LocatedSpan;
-use std::str::FromStr;
 // Using tag_no_case from nom_supreme since its error is nicer
 // ParserExt is mostly for adding `.context` on calls to identifier to say what kind of identifier we want
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, take_while, take_while1},
+    Finish,
+    bytes::complete::{ tag, take_while1},
     character::complete::{
-        alphanumeric1, char, i32 as int32, multispace0, multispace1, none_of, one_of,
+        char, i32 as int32, multispace0, multispace1, none_of,
     },
-    combinator::{all_consuming, cut, map, opt, value},
-    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
-    multi::{many0, separated_list0, separated_list1},
-    number::complete::double,
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
-    AsChar, Err, Finish, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, Parser,
+    combinator::{all_consuming, cut, map, opt},
+    error::context,
+    multi::{many0, separated_list1},
+    sequence::{delimited, preceded, separated_pair, tuple},
 };
 use nom_supreme::{
-    error::{BaseErrorKind, ErrorTree, GenericErrorTree, StackContext},
     tag::complete::tag_no_case,
     ParserExt,
 };
-use serde::{Deserialize, Serialize};
 
-// Use nom_locate's LocatedSpan as a wrapper around a string input
-pub type Span<'a> = LocatedSpan<&'a str>;
-
-// the result for all of our parsers, they will have our span type as input and can have any output
-// this will use a default error type but we will change that latter
-pub type ParseResult<'a, T> = IResult<Span<'a>, T, MyParseError<'a>>;
 
 /// Parse a unquoted sql identifier
 fn identifier(i: Span) -> ParseResult<String> {
@@ -58,7 +48,7 @@ pub trait Parse<'a>: Sized {
     /// Helper method for tests to convert a str into a raw span and parse
     /// It's recommanded to use `parse_format_error`
     fn parse_from_raw(input: &'a str) -> ParseResult<'a, Self> {
-        let i = LocatedSpan::new(input);
+        let i = Span::new(input);
         Self::parse(i)
     }
     /// Parse API that could return formatted Error
@@ -76,23 +66,13 @@ pub trait Parse<'a>: Sized {
     /// }
     /// ```
     fn parse_format_error(i: &'a str) -> Result<Self, FormattedError<'a>> {
-        let input = LocatedSpan::new(i);
+        let input = Span::new(i);
         // match Self::parse(input).finish() {
         match all_consuming(Self::parse)(input).finish() {
             Ok((_, query)) => Ok(query),
             Err(e) => Err(format_parse_error(i, e)),
         }
     }
-}
-
-// many other imports omitted
-/// A colum's type
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum SqlType {
-    // these are basic for now. Will add more + size max later on
-    // TODO: add more types
-    String,
-    Int,
 }
 
 // parses "string | int"
@@ -110,13 +90,6 @@ impl<'a> Parse<'a> for SqlType {
     }
 }
 
-/// A column's name + type
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct Column {
-    pub name: String,
-    pub type_info: SqlType,
-}
-
 /// parses "<colName> <colType>"
 impl<'a> Parse<'a> for Column {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -132,13 +105,6 @@ impl<'a> Parse<'a> for Column {
             ),
         )(input)
     }
-}
-
-/// The table and its columns to create
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct CreateStatement {
-    pub table: String,
-    pub columns: Vec<Column>,
 }
 
 // parses a comma seperated list of column definitions contained in parens
@@ -181,11 +147,6 @@ impl<'a> Parse<'a> for CreateStatement {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct DropStatement {
-    pub table: String,
-}
-
 impl<'a> Parse<'a> for DropStatement {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         map(
@@ -205,12 +166,6 @@ impl<'a> Parse<'a> for DropStatement {
     }
 }
 
-/// Values appears in SQL statement, like insert, update..
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum SqlValue {
-    String(String),
-    Int(i32),
-}
 
 /// String value in SQL statement should be wrapped with apostrophes
 impl<'a> Parse<'a> for String {
@@ -234,11 +189,6 @@ impl<'a> Parse<'a> for SqlValue {
     }
 }
 
-/// Vector of SQL Value, used in insert
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct RowValue {
-    pub values: Vec<SqlValue>,
-}
 
 impl<'a> Parse<'a> for RowValue {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -256,14 +206,6 @@ impl<'a> Parse<'a> for RowValue {
             |values| Self { values },
         )(input)
     }
-}
-
-/// The table and its columns to create
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct InsertStatement {
-    pub table: String,
-    pub columns: Option<Vec<String>>,
-    pub values: RowValue,
 }
 
 /// Column clause in insert statement
@@ -309,16 +251,6 @@ impl<'a> Parse<'a> for InsertStatement {
     }
 }
 
-/// Compare Operators in SQL statement, like <, <=, <>, = ...
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum CmpOpt {
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-}
 
 impl<'a> Parse<'a> for CmpOpt {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -337,14 +269,6 @@ impl<'a> Parse<'a> for CmpOpt {
     }
 }
 
-/// Bool operators in SQL statement, common used in where clause
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum BoolOpt {
-    And,
-    Or,
-    Not,
-}
-
 impl<'a> Parse<'a> for BoolOpt {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
         alt((
@@ -353,14 +277,6 @@ impl<'a> Parse<'a> for BoolOpt {
             // map(tag_no_case("not"), |_| Self::Not),
         ))(input)
     }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum WhereConstraint {
-    Bin(Box<WhereConstraint>, BoolOpt, Box<WhereConstraint>),
-    Not(Box<WhereConstraint>),
-    // column, cmp, value
-    Constrait(String, CmpOpt, SqlValue),
 }
 
 impl<'a> WhereConstraint {
@@ -428,13 +344,6 @@ impl<'a> Parse<'a> for WhereConstraint {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct SelectStatement {
-    table: String,
-    columns: Vec<String>,
-    constraints: Option<WhereConstraint>,
-}
-
 fn result_columns<'a>(input: Span<'a>) -> ParseResult<'a, Vec<String>> {
     context(
         "Result Columns",
@@ -468,11 +377,6 @@ impl<'a> Parse<'a> for SelectStatement {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct SetItem {
-    column: String,
-    value: SqlValue,
-}
 
 impl<'a> Parse<'a> for SetItem {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
@@ -488,13 +392,6 @@ impl<'a> Parse<'a> for SetItem {
             ),
         )(input)
     }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub struct UpdateStatement {
-    pub table: String,
-    pub sets: Vec<SetItem>,
-    pub constraints: Option<WhereConstraint>,
 }
 
 impl<'a> Parse<'a> for UpdateStatement {
@@ -524,14 +421,6 @@ impl<'a> Parse<'a> for UpdateStatement {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum SqlQuery {
-    Select(SelectStatement),
-    Insert(InsertStatement),
-    Create(CreateStatement),
-    Drop(DropStatement),
-    Update(UpdateStatement),
-}
 
 impl<'a> Parse<'a> for SqlQuery {
     fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
