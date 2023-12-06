@@ -1,6 +1,5 @@
 use super::errors::{format_parse_error, FormattedError};
 use super::types::*;
-use miette::GraphicalReportHandler;
 // Using tag_no_case from nom_supreme since its error is nicer
 // ParserExt is mostly for adding `.context` on calls to identifier to say what kind of identifier we want
 use nom::{
@@ -679,7 +678,7 @@ mod test_update_stmt {
 
 #[cfg(test)]
 mod test_query {
-
+    use miette::GraphicalReportHandler;
     use super::*;
     fn print_error(query: &str) {
         match SqlQuery::parse_format_error(query) {

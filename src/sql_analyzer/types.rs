@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use nom_locate::LocatedSpan;
 use nom::IResult;
+use tabled::Tabled;
 use super::errors::MyParseError;
 
 // Use nom_locate's LocatedSpan as a wrapper around a string input
@@ -15,7 +16,6 @@ pub type ParseResult<'a, T> = IResult<Span<'a>, T, MyParseError<'a>>;
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum SqlType {
     // these are basic for now. Will add more + size max later on
-    // TODO: add more types
     String,
     Int,
 }
@@ -29,6 +29,7 @@ pub struct Column {
 
 /// Values appears in SQL statement, like insert, update..
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Tabled)]
 pub enum SqlValue {
     String(String),
     Int(i32),

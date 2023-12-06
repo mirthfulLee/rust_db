@@ -1,3 +1,3 @@
-mod parser;
-mod types;
-mod errors;
+pub mod parser;
+pub mod types;
+pub mod errors;
