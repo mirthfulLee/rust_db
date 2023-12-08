@@ -14,6 +14,8 @@ use rustyline::{Editor, Result};
 const HISTORY_FILE: &str = "./data/history.txt";
 
 fn parse_and_execute(line: &str) {
+
+    
     let parse_result = SqlQuery::parse_format_error(&line);
     match parse_result {
         Ok(query) => {
@@ -46,6 +48,7 @@ fn main() -> Result<()> {
     if rl.load_history(HISTORY_FILE).is_err() {
         println!("No previous history.");
     }
+    //path
     loop {
         let readline = rl.readline(">> ");
         match readline {

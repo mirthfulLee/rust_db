@@ -18,6 +18,7 @@ pub enum SqlType {
     // these are basic for now. Will add more + size max later on
     String,
     Int,
+    Unknown,
 }
 
 /// A column's name + type
@@ -33,6 +34,7 @@ pub struct Column {
 pub enum SqlValue {
     String(String),
     Int(i32),
+    Unknown,
 }
 
 /// Vector of SQL Value, used in insert

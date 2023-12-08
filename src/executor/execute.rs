@@ -1,4 +1,5 @@
 use super::super::sql_analyzer::types::*;
+use super::super::storage::StoreUtil;
 use super::types::*;
 use std::fmt::Display;
 use tabled::settings::style::{HorizontalLine, VerticalLine};
@@ -15,12 +16,43 @@ impl SqlTable {
 }
 
 impl Executable for CreateStatement {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
+        // pub enum StoreUtil {
+        //     /// The persistent data table is in csv format
+        //     Csv(String),
+        //     /// The persistent data table is in json format
+        //     Json(String),
+        // }
+    
+        // pub struct CreateStatement {
+        //     pub table: String,
+        //     pub columns: Vec<Column>,
+        // }
+
+        // pub enum ExecuteResponse {
+        //     Message(String),
+        //     Count(usize),
+        //     View(Box<SqlTable>)
+        // }
+
+        // pub struct Column {
+        //     pub name: String,
+        //     pub type_info: SqlType,
+        // }
+
+        // pub enum SqlType {
+        //     // these are basic for now. Will add more + size max later on
+        //     String,
+        //     Int,
+        // }
+        
         todo!()
     }
 }
 
 impl Executable for DropStatement {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
@@ -28,31 +60,43 @@ impl Executable for DropStatement {
 
 impl Executable for InsertStatement {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for DeleteStatement {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for SelectStatement {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for UpdateStatement {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for SqlQuery {
     fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         match self {
+            // SqlQuery::Create(stmt) => stmt.check_and_execute(storage_util),
+            // SqlQuery::Drop(stmt) => stmt.check_and_execute(storage_util),
+            // SqlQuery::Insert(stmt) => stmt.check_and_execute(storage_util),
+            // SqlQuery::Delete(stmt) => stmt.check_and_execute(storage_util),
+            // SqlQuery::Update(stmt) => stmt.check_and_execute(storage_util),
+            // SqlQuery::Select(stmt) => stmt.check_and_execute(storage_util),
+
             SqlQuery::Create(stmt) => stmt.check_and_execute(),
             SqlQuery::Drop(stmt) => stmt.check_and_execute(),
             SqlQuery::Insert(stmt) => stmt.check_and_execute(),
@@ -68,6 +112,7 @@ impl Into<String> for SqlValue {
         match self {
             SqlValue::String(s) => s,
             SqlValue::Int(i) => i.to_string(),
+            _ => String::from("Unknow"),
         }
     }
 }
