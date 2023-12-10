@@ -6,10 +6,11 @@ use csv::{ReaderBuilder, StringRecord};
 use std::io;
 use super::sql_analyzer::types::SqlType;
 use super::sql_analyzer::types::Column;
-use crate::sql_analyzer::types::RowValue;
-use crate::sql_analyzer::types::SqlValue;
+use super::sql_analyzer::types::RowValue;
+use super::sql_analyzer::types::SqlValue;
 use chrono::prelude::*;
 use csv::Writer;
+use csv::Reader;
 
 pub enum StoreUtil {
     /// The persistent data table is in csv format
@@ -23,7 +24,7 @@ pub enum StoreUtil {
 
 impl StoreUtil {
     // return file's path
-    fn get_path(&self,name: &String) -> String{
+    pub fn get_path(&self,name: &String) -> String{
         let path_root;
         match self {
             StoreUtil::Csv(path) => {
@@ -37,13 +38,25 @@ impl StoreUtil {
         path
     }
     /// check whether the table exists
-    fn exists(&self,name: &String) -> bool {
+    pub fn exists(&self,name: &String) -> bool {
         let path=self.get_path(name);
         fs::metadata(path).is_ok()
     }
 
+    pub fn delete(&self,name: &String) -> Result<(), io::Error> {
+        if self.exists(&name) {
+            let path=self.get_path(&name);
+            fs::remove_file(path.clone())?;
+            Ok(())
+        }
+        else{
+            return Err(io::Error::new(io::ErrorKind::NotFound, "Table not found"));
+        }
+
+    }
+
     /// load table with table name
-    fn load(&self,name: String) -> Result<SqlTable, io::Error> {
+    pub fn load(&self,name: String) -> Result<SqlTable, io::Error> {
         if !self.exists(&name) {
             return Err(io::Error::new(io::ErrorKind::NotFound, "Table not found"));
         }
@@ -51,9 +64,10 @@ impl StoreUtil {
             let path=self.get_path(&name);
             let file = File::open(path)?;
             let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(file);
-            let records: Vec<StringRecord> = csv_reader.records().collect::<Result<_, _>>()?;
-            let columns_name: Vec<String> = records[0].iter().map(|col| col.to_string()).collect();
-            let columns_type: Vec<String> = records[1].iter().map(|col| col.to_string()).collect();
+            let head: &StringRecord = csv::Reader::headers(&mut csv_reader)?;
+            let columns_name: Vec<String> = head.iter().map(|col| col.to_string()).collect();
+            let records: Vec<StringRecord> = csv::Reader::records(&mut csv_reader).collect::<Result<_, _>>()?;
+            let columns_type: Vec<String> = records[0].iter().map(|col| col.to_string()).collect();
             let columns: Vec<Column> = columns_name
                 .iter()
                 .zip(columns_type.iter())
@@ -68,7 +82,7 @@ impl StoreUtil {
                     }
                 })
                 .collect();
-            let rows: Vec<RowValue> = records[2..]
+            let rows: Vec<RowValue> = records[1..]
                 .iter()
                 .map(|record| {
                     let values: Vec<SqlValue> = record.iter().zip(columns.iter()).map(|(field, column)| {
@@ -80,15 +94,15 @@ impl StoreUtil {
                             _ => SqlValue::Unknown,
                         }
                     }).collect();
-            
                     RowValue { values }
                 })
                 .collect();
+            
             Ok(SqlTable { columns, rows })
         }
     }
     /// save table persistently
-    fn save(&self,name: String,table: SqlTable)-> Result<(), io::Error>  {
+    pub fn save(&self,name: String,table: &SqlTable)-> Result<(), io::Error>  {
 
         let path=self.get_path(&name);
         if self.exists(&name) {
@@ -96,7 +110,7 @@ impl StoreUtil {
             fs::remove_file(path.clone())?
         }
         //get infos from table
-        let columns=table.columns;
+        let columns=&table.columns;
         let columns_name: Vec<String> = columns.iter().map(|column| column.name.clone()).collect();
         let columns_type: Vec<String> = columns.iter().map(|column| {
             match column.type_info {
@@ -112,7 +126,7 @@ impl StoreUtil {
         writer_csv.write_record(columns_name)?;
         writer_csv.write_record(columns_type)?;
         let columns_row_value: Vec<SqlValue> = Vec::new();
-        let original_matrix = table.rows;
+        let original_matrix = &table.rows;
         for row in original_matrix {
             let row_values: Vec<String> = row.clone().values.iter().map(|sql_value| {
                 match sql_value {
@@ -154,13 +168,9 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
 
         // Call the save function with the test data
-        let result = storage.save(String::from("test_table.csv"), test_table);
+        let result = storage.save("test_table.csv".into(),&test_table);
 
         // Assert that the save function returned Ok
         assert!(result.is_ok());
-
-        // Optionally, you can assert the content of the buffer or other conditions
-        // For example, if you have a helper function to parse CSV content, you can use it to check the result.
-        // assert_eq!(parse_csv(&buffer), Some(expected_result));
     }
 }

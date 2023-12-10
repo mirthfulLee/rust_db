@@ -1,9 +1,71 @@
-use super::super::sql_analyzer::types::*;
 use super::super::storage::StoreUtil;
 use super::types::*;
+use super::super::sql_analyzer::types::*;
 use std::fmt::Display;
 use tabled::settings::style::{HorizontalLine, VerticalLine};
 use tabled::{builder::Builder, settings::Style};
+use std::io;
+
+
+fn compare_name(names_insert:&Vec<String>,columns:&Vec<Column>) -> bool{
+    let mut names_columns: Vec<String> = Vec::new();
+    for column in columns {
+        names_columns.push(column.name.clone());
+    }
+    for name_insert in names_insert {
+        if !names_columns.contains(&name_insert) {
+            return false;
+        }
+    }
+    return true;
+
+}
+
+fn get_newrol(names_insert:Vec<String>,columns:&Vec<Column>,value:RowValue) -> Result<RowValue, io::Error>{
+    match compare_name(&names_insert,columns) {
+        true => {
+            // Create an iterator over the names_table
+            let mut row_values:Vec<SqlValue> = Vec::new();
+            // let name_columns: Vec<String> = columns.iter().map(|column: &Column| column.name.clone()).collect();
+            for column in columns {
+                let mut flag=0;
+                if let Some(index) = names_insert.iter().position(|name_insert| name_insert == &column.name) {
+                    // row_value.push(value.clone().values[index]);
+                    let values: &Vec<SqlValue>=&value.values;
+                    match &values[index] {
+                        SqlValue::String(row_value) => {
+                            row_values.push(SqlValue::String((row_value.clone())));
+                        }
+                        SqlValue::Int(row_value) => {
+                            row_values.push(SqlValue::Int(*row_value));
+                        }
+                        SqlValue::Unknown =>{
+                            row_values.push(SqlValue::Unknown);
+                        }
+                    }
+                } else {
+                    match column.type_info {
+                        SqlType::String => {
+                            row_values.push(SqlValue::String("NULL".to_string()))
+                        },
+                        SqlType::Int => {
+                            row_values.push(SqlValue::Int(0))
+                        },
+                        SqlType::Unknown => {
+                            row_values.push(SqlValue::Unknown)
+                        },
+                    }
+                }
+            }
+            let rowvalues:RowValue=RowValue{values:row_values};
+            Ok(rowvalues)
+        }
+        flase => {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "Name of row is error"));
+        }
+    }
+
+}
 
 impl SqlTable {
     /// used to create a new empty table
@@ -16,93 +78,128 @@ impl SqlTable {
 }
 
 impl Executable for CreateStatement {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-        // pub enum StoreUtil {
-        //     /// The persistent data table is in csv format
-        //     Csv(String),
-        //     /// The persistent data table is in json format
-        //     Json(String),
-        // }
-    
-        // pub struct CreateStatement {
-        //     pub table: String,
-        //     pub columns: Vec<Column>,
-        // }
-
-        // pub enum ExecuteResponse {
-        //     Message(String),
-        //     Count(usize),
-        //     View(Box<SqlTable>)
-        // }
-
-        // pub struct Column {
-        //     pub name: String,
-        //     pub type_info: SqlType,
-        // }
-
-        // pub enum SqlType {
-        //     // these are basic for now. Will add more + size max later on
-        //     String,
-        //     Int,
-        // }
-        
-        todo!()
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+        let name = self.table.clone();
+        let columns_infos = self.columns;
+        let table=SqlTable::new(columns_infos);
+        match storage_util.save(name.clone(),&table){
+            Ok(()) => {
+                Ok(ExecuteResponse::Message(format!("save {} successful", name)))
+            }
+            Err(_) => {
+                Err(QueryExecutionError::TableSavefail(name))
+            }, 
+        }
     }
 }
 
 impl Executable for DropStatement {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-        todo!()
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+        let name = self.table.clone();
+        match storage_util.delete(&name){
+            Ok(()) => {
+                Ok(ExecuteResponse::Message(format!("delete {} successful", name)))
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    Err(QueryExecutionError::ColumnDoesNotExist(name))
+                }
+                _ => {
+                    Err(QueryExecutionError::TableDeletefail(name))
+                }
+            }, 
+        }
     }
 }
 
 impl Executable for InsertStatement {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-        todo!()
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+        let name = self.table.clone();
+        match storage_util.load(name.clone()){
+            Ok((table)) => {
+                let columns: Vec<Column> = table.columns;
+                let mut rows: Vec<RowValue> = table.rows;
+                let name_columns: Vec<String> = columns.iter().map(|column: &Column| column.name.clone()).collect();
+                match self.columns {
+                    Some(name_insert) => {
+                        match get_newrol(name_insert,&columns,self.values) {
+                            Ok(rowvalue) => {
+                                rows.push(rowvalue);
+                                let new_table = SqlTable{columns,rows};
+                                match storage_util.save(name.clone(), &new_table){
+                                    Ok(()) => {
+                                        Ok(ExecuteResponse::Message(format!("save {} successful", name)))
+                                    }
+                                    Err(_) => {
+                                        Err(QueryExecutionError::TableSavefail(name))
+                                    }, 
+                                }
+                            },
+                            Err(_) =>{
+                                Err(QueryExecutionError::TypeDoesNotMatch(name))
+                            }
+                        }
+                    }
+                    None => {
+                            let rowvalue = self.values;
+                            rows.push(rowvalue);
+                            let new_table = SqlTable{columns,rows};
+                            match storage_util.save(name.clone(), &new_table){
+                                Ok(()) => {
+                                    Ok(ExecuteResponse::Message(format!("save {} successful", name)))
+                                }
+                                Err(_) => {
+                                    Err(QueryExecutionError::TableSavefail(name))
+                                }, 
+                            }
+                        },      
+                    }
+
+                }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    Err(QueryExecutionError::ColumnDoesNotExist(name))
+                }
+                _ => {
+                    Err(QueryExecutionError::TableOpenfail(name))
+                }
+            }, 
+        }
     }
 }
 
 impl Executable for DeleteStatement {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for SelectStatement {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for UpdateStatement {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+    // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         todo!()
     }
 }
 
 impl Executable for SqlQuery {
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> {
-    // fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
+    fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         match self {
-            // SqlQuery::Create(stmt) => stmt.check_and_execute(storage_util),
-            // SqlQuery::Drop(stmt) => stmt.check_and_execute(storage_util),
-            // SqlQuery::Insert(stmt) => stmt.check_and_execute(storage_util),
-            // SqlQuery::Delete(stmt) => stmt.check_and_execute(storage_util),
-            // SqlQuery::Update(stmt) => stmt.check_and_execute(storage_util),
-            // SqlQuery::Select(stmt) => stmt.check_and_execute(storage_util),
+            SqlQuery::Create(stmt) => stmt.check_and_execute(storage_util),
+            SqlQuery::Drop(stmt) => stmt.check_and_execute(storage_util),
+            SqlQuery::Insert(stmt) => stmt.check_and_execute(storage_util),
+            SqlQuery::Delete(stmt) => stmt.check_and_execute(storage_util),
+            SqlQuery::Update(stmt) => stmt.check_and_execute(storage_util),
+            SqlQuery::Select(stmt) => stmt.check_and_execute(storage_util),
 
-            SqlQuery::Create(stmt) => stmt.check_and_execute(),
-            SqlQuery::Drop(stmt) => stmt.check_and_execute(),
-            SqlQuery::Insert(stmt) => stmt.check_and_execute(),
-            SqlQuery::Delete(stmt) => stmt.check_and_execute(),
-            SqlQuery::Update(stmt) => stmt.check_and_execute(),
-            SqlQuery::Select(stmt) => stmt.check_and_execute(),
+
         }
     }
 }

@@ -1,5 +1,5 @@
 use super::super::sql_analyzer::types::*; 
-
+use super::super::storage::*; 
 use thiserror::Error;
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
@@ -35,9 +35,15 @@ pub enum QueryExecutionError {
     ColumnDoesNotExist(String),
     #[error("Type {0} does not match the column definition")]
     TypeDoesNotMatch(String),
+    #[error("Table {0} delete fail")]
+    TableDeletefail(String),
+    #[error("Table {0} save fail")]
+    TableSavefail(String),
+    #[error("Table {0} open fail")]
+    TableOpenfail(String),
 }
 
 pub trait Executable {
     /// The error should be check error with error message
-    fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError>;
+    fn check_and_execute(self,storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError>;
 }

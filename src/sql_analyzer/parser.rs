@@ -13,7 +13,6 @@ use nom::{
     Finish,
 };
 use nom_supreme::{tag::complete::tag_no_case, ParserExt};
-
 /// Parse a unquoted sql identifier
 fn identifier(i: Span) -> ParseResult<String> {
     map(
