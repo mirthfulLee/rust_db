@@ -41,6 +41,8 @@ pub enum QueryExecutionError {
     TableSavefail(String),
     #[error("Table {0} open fail")]
     TableOpenfail(String),
+    // #[error("The target record is not present in the table {0}")]
+    // RecordDonsNotExist(String),
 }
 
 pub trait Executable {

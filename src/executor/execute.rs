@@ -7,23 +7,22 @@ use tabled::{builder::Builder, settings::Style};
 use std::io;
 
 
-fn compare_name(names_insert:&Vec<String>,columns:&Vec<Column>) -> bool{
+fn compare_name(names_insert: &Vec<String>, columns: &Vec<Column>) -> Option<String> {
     let mut names_columns: Vec<String> = Vec::new();
     for column in columns {
         names_columns.push(column.name.clone());
-    }
+    } 
     for name_insert in names_insert {
-        if !names_columns.contains(&name_insert) {
-            return false;
+        if !names_columns.contains(name_insert) {
+            return Some(name_insert.clone());
         }
     }
-    return true;
-
+    None
 }
 
-fn get_newrol(names_insert:Vec<String>,columns:&Vec<Column>,value:RowValue) -> Result<RowValue, io::Error>{
+fn get_newrol(names_insert:Vec<String>,columns:&Vec<Column>,value:RowValue) -> Result<RowValue, QueryExecutionError>{
     match compare_name(&names_insert,columns) {
-        true => {
+        None => {
             // Create an iterator over the names_table
             let mut row_values:Vec<SqlValue> = Vec::new();
             // let name_columns: Vec<String> = columns.iter().map(|column: &Column| column.name.clone()).collect();
@@ -60,8 +59,8 @@ fn get_newrol(names_insert:Vec<String>,columns:&Vec<Column>,value:RowValue) -> R
             let rowvalues:RowValue=RowValue{values:row_values};
             Ok(rowvalues)
         }
-        flase => {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "Name of row is error"));
+        Some(name_insert) => {
+            return Err(QueryExecutionError::ColumnDoesNotExist(name_insert))
         }
     }
 
@@ -102,7 +101,7 @@ impl Executable for DropStatement {
             }
             Err(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => {
-                    Err(QueryExecutionError::ColumnDoesNotExist(name))
+                    Err(QueryExecutionError::TableNotFound(name))
                 }
                 _ => {
                     Err(QueryExecutionError::TableDeletefail(name))
@@ -135,8 +134,8 @@ impl Executable for InsertStatement {
                                     }, 
                                 }
                             },
-                            Err(_) =>{
-                                Err(QueryExecutionError::TypeDoesNotMatch(name))
+                            Err(err) => {
+                                Err(err)
                             }
                         }
                     }
@@ -158,7 +157,7 @@ impl Executable for InsertStatement {
                 }
             Err(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => {
-                    Err(QueryExecutionError::ColumnDoesNotExist(name))
+                    Err(QueryExecutionError::TableNotFound(name))
                 }
                 _ => {
                     Err(QueryExecutionError::TableOpenfail(name))
@@ -171,7 +170,31 @@ impl Executable for InsertStatement {
 impl Executable for DeleteStatement {
     // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-        todo!()
+        let name = self.table.clone();
+        match storage_util.load(name.clone()){
+            Ok((table)) => {
+                // pub struct DeleteStatement {
+                //     pub table: String,
+                //     pub constraints: Option<WhereConstraint>,
+                // }
+                match self.constraints {
+                    Some(constraints) => {
+                        todo!()
+                    }
+                    None => {
+                        Err(QueryExecutionError::TableNotFound(name))
+                    }
+                }
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    Err(QueryExecutionError::TableNotFound(name))
+                }
+                _ => {
+                    Err(QueryExecutionError::TableOpenfail(name))
+                }
+            }, 
+        }
     }
 }
 
@@ -284,3 +307,4 @@ mod tests {
         println!("{}", res);
     }
 }
+
