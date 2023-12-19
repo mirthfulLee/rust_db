@@ -7,7 +7,108 @@ use tabled::{builder::Builder, settings::Style};
 use std::io;
 
 
+fn compare_sqlvalue(sqlvalue1:&SqlValue,sqlvalue2:&SqlValue,cmp_opt:&CmpOpt) -> bool{
+    match sqlvalue1 {
+        SqlValue::Int(value1) => {
+            match sqlvalue2 {
+                SqlValue::Int(value2) => {
+                    match cmp_opt {
+                        CmpOpt::Eq => value1 == value2,
+                        CmpOpt::Ge => value1 >= value2,
+                        CmpOpt::Gt => value1 > value2,
+                        CmpOpt::Le => value1 <= value2,
+                        CmpOpt::Lt => value1 < value2,
+                        CmpOpt::Ne => value1 != value2,
+                    }
+                }
+                _ => {
+                    return false;
+                }
+            }
+        }
+        SqlValue::String(value1) => {
+            match  sqlvalue2 {
+                SqlValue::String(value2) => {
+                    match cmp_opt {
+                        CmpOpt::Eq => value1 == value2,
+                        CmpOpt::Ge => value1 >= value2,
+                        CmpOpt::Gt => value1 > value2,
+                        CmpOpt::Le => value1 <= value2,
+                        CmpOpt::Lt => value1 < value2,
+                        CmpOpt::Ne => value1 != value2,
+                    }
+                }
+                _ => {
+                    return false;
+                }
+            }
+        }
+        _ => {
+            return false;
+        }
+    }
+}
+
+fn compare_condition(wc:WhereConstraint,record : &RowValue,record_names:&Vec<String>) -> bool {
+    match wc {
+        WhereConstraint::Constrait(name, cmp_opt, sql_value) => {
+            // Handle Constrait case
+            if  !record_names.contains(&name) {
+                return false
+            }
+            else {
+                // Find the index of 'name' in 'record_name'
+                let index = record_names.iter().position(|r_name| r_name == &name).unwrap();
+                // Retrieve the SqlValue from 'record' using the index
+                let record_value = &record.values[index];
+
+                // Compare 'record_value' with 'sql_value' based on 'cmp_opt'
+                compare_sqlvalue(&record_value, &sql_value, &cmp_opt)
+
+            }
+        }
+        WhereConstraint::Not(wc_box) => {
+            // Handle Constrait case
+            // let mut result: Vec<SelectCriteria> = Vec::new();
+            let new_wc = *wc_box.clone();
+            if !compare_condition(new_wc,&record,&record_names) {
+                return true;
+            } 
+            else {
+                return false;
+            }
+        }
+        WhereConstraint::Bin(left_wc,cmpopt ,right_wc ) => {
+            match cmpopt {
+                BoolOpt::And => {
+                    let new_left_wc: WhereConstraint = *left_wc.clone();
+                    let new_right_wc: WhereConstraint = *right_wc.clone();
+                    if compare_condition(new_left_wc,&record,&record_names) && compare_condition(new_right_wc,&record,&record_names){
+                        return true;
+                    }
+                    else {
+                        return false;
+                    }
+                }
+                BoolOpt::Or => {
+                    let new_left_wc: WhereConstraint = *left_wc.clone();
+                    let new_right_wc: WhereConstraint = *right_wc.clone();
+                    if compare_condition(new_left_wc,&record,&record_names) || compare_condition(new_right_wc,&record,&record_names){
+                        return true;
+                    }
+                    else {
+                        return false;
+                    }
+                }
+                _ => {
+                    return false;
+                }
+            }
+        }
+    }
+}
 fn compare_name(names_insert: &Vec<String>, columns: &Vec<Column>) -> Option<String> {
+    //Determine if the input column name exists in the table
     let mut names_columns: Vec<String> = Vec::new();
     for column in columns {
         names_columns.push(column.name.clone());
@@ -21,6 +122,7 @@ fn compare_name(names_insert: &Vec<String>, columns: &Vec<Column>) -> Option<Str
 }
 
 fn get_newrol(names_insert:Vec<String>,columns:&Vec<Column>,value:RowValue) -> Result<RowValue, QueryExecutionError>{
+    //Arrange and complete input values according to column names, ensuring that they are in the same order as the data in the table
     match compare_name(&names_insert,columns) {
         None => {
             // Create an iterator over the names_table
@@ -168,21 +270,22 @@ impl Executable for InsertStatement {
 }
 
 impl Executable for DeleteStatement {
-    // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let name = self.table.clone();
         match storage_util.load(name.clone()){
+            //check the result of loading
             Ok((table)) => {
-                // pub struct DeleteStatement {
-                //     pub table: String,
-                //     pub constraints: Option<WhereConstraint>,
-                // }
+                //pub constraints: Option<WhereConstraint>,
                 match self.constraints {
                     Some(constraints) => {
+
+                        // }
                         todo!()
                     }
+                    
                     None => {
-                        Err(QueryExecutionError::TableNotFound(name))
+                        //value is null
+                        Err(QueryExecutionError::ValueIsNull(name))
                     }
                 }
             }
@@ -201,9 +304,79 @@ impl Executable for DeleteStatement {
 impl Executable for SelectStatement {
     // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-        todo!()
+        let table_name = self.table.clone();
+        let mut rows_mapping :Vec<RowValue> = Vec::new();
+        let wc = match self.constraints {
+            Some(wc_tmp) => {
+                wc_tmp
+            },
+            None => {
+                return Err(QueryExecutionError::NoConditionsObtained());
+            }
+        };
+        match storage_util.load(table_name.clone()){
+            //check the result of loading
+            Ok((table)) => {
+                let columns: Vec<Column> = table.columns;
+                let columns_clone = columns.clone();
+                let names_columns = columns_clone.iter().map(|column: &Column| column.name.clone()).collect();
+                let rows = table.rows;
+                for row in rows {
+                    match compare_condition(wc.clone(), &row, &names_columns) {
+                        true => {
+                            rows_mapping.push(row)
+                        }
+                        false => {}
+                    }
+                }
+                let mut columns_return:Vec<Column> = Vec::new();
+                let mut rows_return:Vec<RowValue> = Vec::new();
+                let columns_get = self.columns;
+                for column_get in columns_get {
+                    if column_get == "*" {
+                        for column in &columns {
+                            columns_return.push(column.clone());
+                        }
+                    }
+                    else{
+                        let columns_clone = columns.clone();
+                        if let Some(matched_column) = columns_clone.iter().find(|&col| col.name == column_get) {
+                            columns_return.push(matched_column.clone());
+                        }
+                    }
+
+                }
+                for row_mapping in rows_mapping {
+                    let mut row_return :Vec<SqlValue> = Vec::new();
+                    for column_return in &columns_return {
+                        let row_mapping_values = row_mapping.values.clone();
+                        let columns_clone = columns.clone();
+                        let uindex = columns_clone.iter().position(|r_name| r_name.name == column_return.name).unwrap();
+                        row_return.push(row_mapping_values[uindex].clone());
+                    }
+                    let rowvalue_return = RowValue{
+                        values:row_return
+                    };
+                    rows_return.push(rowvalue_return)
+                }
+                let sqltable_return = SqlTable {
+                    columns : columns_return,
+                    rows : rows_return,
+                };
+                let box_sqltable_return: Box<SqlTable> = Box::new(sqltable_return);
+                return Ok(ExecuteResponse::View(box_sqltable_return));
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    Err(QueryExecutionError::TableNotFound(table_name))
+                }
+                _ => {
+                    Err(QueryExecutionError::TableOpenfail(table_name))
+                }
+            }, 
+        }
+        }
     }
-}
 
 impl Executable for UpdateStatement {
     // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 

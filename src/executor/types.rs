@@ -23,6 +23,14 @@ pub enum ExecuteResponse {
     View(Box<SqlTable>)
 }
 
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SelectCriteria {
+    pub columns_name:String,
+    pub cmpopt:CmpOpt,
+    pub value:SqlValue,
+}
+
 /// Errors during query execution
 #[derive(Error, Debug, Diagnostic)]
 #[error("Query Execution Error")]
@@ -41,8 +49,10 @@ pub enum QueryExecutionError {
     TableSavefail(String),
     #[error("Table {0} open fail")]
     TableOpenfail(String),
-    // #[error("The target record is not present in the table {0}")]
-    // RecordDonsNotExist(String),
+    #[error("The value which want to delete is null")]
+    ValueIsNull(String),
+    #[error("No conditions obtained")]
+    NoConditionsObtained(),
 }
 
 pub trait Executable {
