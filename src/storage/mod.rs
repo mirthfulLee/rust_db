@@ -145,8 +145,6 @@ impl StoreUtil {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write; // Import Write trait for in-memory testing
-
     #[test]
     fn test_save_cvs() {
         // Create a test SqlTable

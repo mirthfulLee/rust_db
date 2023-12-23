@@ -4,13 +4,14 @@ use super::super::sql_analyzer::types::*;
 use std::fmt::Display;
 use tabled::settings::style::{HorizontalLine, VerticalLine};
 use tabled::{builder::Builder, settings::Style};
-use std::io;
 
 
 fn compare_sqlvalue(sqlvalue1:&SqlValue,sqlvalue2:&SqlValue,cmp_opt:&CmpOpt) -> bool{
+    //Determine whether the relationship between two values meets the input criteria
     match sqlvalue1 {
         SqlValue::Int(value1) => {
             match sqlvalue2 {
+                //Compare int
                 SqlValue::Int(value2) => {
                     match cmp_opt {
                         CmpOpt::Eq => value1 == value2,
@@ -28,6 +29,7 @@ fn compare_sqlvalue(sqlvalue1:&SqlValue,sqlvalue2:&SqlValue,cmp_opt:&CmpOpt) -> 
         }
         SqlValue::String(value1) => {
             match  sqlvalue2 {
+                //Compare String
                 SqlValue::String(value2) => {
                     match cmp_opt {
                         CmpOpt::Eq => value1 == value2,
@@ -50,6 +52,7 @@ fn compare_sqlvalue(sqlvalue1:&SqlValue,sqlvalue2:&SqlValue,cmp_opt:&CmpOpt) -> 
 }
 
 fn compare_condition(wc:WhereConstraint,record : &RowValue,record_names:&Vec<String>) -> bool {
+    //Based on the input conditions, judge whether the record meets the conditions
     match wc {
         WhereConstraint::Constrait(name, cmp_opt, sql_value) => {
             // Handle Constrait case
@@ -79,6 +82,7 @@ fn compare_condition(wc:WhereConstraint,record : &RowValue,record_names:&Vec<Str
             }
         }
         WhereConstraint::Bin(left_wc,cmpopt ,right_wc ) => {
+            //Recursive call
             match cmpopt {
                 BoolOpt::And => {
                     let new_left_wc: WhereConstraint = *left_wc.clone();
@@ -179,6 +183,7 @@ impl SqlTable {
 }
 
 impl Executable for CreateStatement {
+    //Create a new table
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let name = self.table.clone();
         let columns_infos = self.columns;
@@ -195,6 +200,7 @@ impl Executable for CreateStatement {
 }
 
 impl Executable for DropStatement {
+    //delete a table
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let name = self.table.clone();
         match storage_util.delete(&name){
@@ -214,6 +220,7 @@ impl Executable for DropStatement {
 }
 
 impl Executable for InsertStatement {
+    // insert a record
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let name = self.table.clone();
         match storage_util.load(name.clone()){
@@ -270,6 +277,7 @@ impl Executable for InsertStatement {
 }
 
 impl Executable for DeleteStatement {
+    // delete a record
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let table_name = self.table.clone();
         let wc = match self.constraints {
@@ -319,7 +327,7 @@ impl Executable for DeleteStatement {
 }
 
 impl Executable for SelectStatement {
-    // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
+    // select recodes in table
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let table_name = self.table.clone();
         let mut rows_mapping :Vec<RowValue> = Vec::new();
@@ -396,7 +404,7 @@ impl Executable for SelectStatement {
     }
 
 impl Executable for UpdateStatement {
-    // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
+    // Replace Record
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let table_name = self.table.clone();
         let wc = match self.constraints {
