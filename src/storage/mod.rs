@@ -1,16 +1,13 @@
 use super::executor::types::*;
 use std::fs;
 use std::fs::File;
-use csv::Error;
 use csv::{ReaderBuilder, StringRecord};
 use std::io;
 use super::sql_analyzer::types::SqlType;
 use super::sql_analyzer::types::Column;
 use super::sql_analyzer::types::RowValue;
 use super::sql_analyzer::types::SqlValue;
-use chrono::prelude::*;
 use csv::Writer;
-use csv::Reader;
 
 pub enum StoreUtil {
     /// The persistent data table is in csv format
@@ -125,7 +122,6 @@ impl StoreUtil {
         let mut writer_csv = Writer::from_path(path)?;
         writer_csv.write_record(columns_name)?;
         writer_csv.write_record(columns_type)?;
-        let columns_row_value: Vec<SqlValue> = Vec::new();
         let original_matrix = &table.rows;
         for row in original_matrix {
             let row_values: Vec<String> = row.clone().values.iter().map(|sql_value| {
@@ -161,9 +157,6 @@ mod tests {
 
         // Create a test Storage object
         let storage = StoreUtil::Csv(String::from(r"E:\git_commits\rust_db"));
-
-        // Create an in-memory buffer for testing
-        let mut buffer: Vec<u8> = Vec::new();
 
         // Call the save function with the test data
         let result = storage.save("test_table.csv".into(),&test_table);

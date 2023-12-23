@@ -133,13 +133,12 @@ fn get_newrol(names_insert:Vec<String>,columns:&Vec<Column>,value:RowValue) -> R
             let mut row_values:Vec<SqlValue> = Vec::new();
             // let name_columns: Vec<String> = columns.iter().map(|column: &Column| column.name.clone()).collect();
             for column in columns {
-                let mut flag=0;
                 if let Some(index) = names_insert.iter().position(|name_insert| name_insert == &column.name) {
                     // row_value.push(value.clone().values[index]);
                     let values: &Vec<SqlValue>=&value.values;
                     match &values[index] {
                         SqlValue::String(row_value) => {
-                            row_values.push(SqlValue::String((row_value.clone())));
+                            row_values.push(SqlValue::String(row_value.clone()));
                         }
                         SqlValue::Int(row_value) => {
                             row_values.push(SqlValue::Int(*row_value));
@@ -224,10 +223,10 @@ impl Executable for InsertStatement {
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
         let name = self.table.clone();
         match storage_util.load(name.clone()){
-            Ok((table)) => {
+            Ok(table) => {
                 let columns: Vec<Column> = table.columns;
                 let mut rows: Vec<RowValue> = table.rows;
-                let name_columns: Vec<String> = columns.iter().map(|column: &Column| column.name.clone()).collect();
+                // let name_columns: Vec<String> = columns.iter().map(|column: &Column| column.name.clone()).collect();
                 match self.columns {
                     Some(name_insert) => {
                         match get_newrol(name_insert,&columns,self.values) {
@@ -290,7 +289,7 @@ impl Executable for DeleteStatement {
         };
         match storage_util.load(table_name.clone()){
             //check the result of loading
-            Ok((table)) => {
+            Ok(table) => {
                 let rows_old: Vec<RowValue> = table.rows;
                 let columns_old = table.columns;
                 let mut name_old:Vec<String> = Vec::new();
@@ -309,8 +308,14 @@ impl Executable for DeleteStatement {
                     columns:columns_old,
                     rows:rows_new,
                 };
-                storage_util.save(table_name, &table_new);
-                Ok((ExecuteResponse::Message("delete final".to_string())))
+                match storage_util.save(table_name.clone(), &table_new) {
+                    Ok(_)=> {
+                        Ok(ExecuteResponse::Message("delete final".to_string()))
+                    }
+                    Err(_) => {
+                        Err(QueryExecutionError::TableSavefail(table_name))
+                    }
+                } 
                 
 
             }
@@ -341,7 +346,7 @@ impl Executable for SelectStatement {
         };
         match storage_util.load(table_name.clone()){
             //check the result of loading
-            Ok((table)) => {
+            Ok(table) => {
                 let columns: Vec<Column> = table.columns;
                 let columns_clone = columns.clone();
                 let names_columns = columns_clone.iter().map(|column: &Column| column.name.clone()).collect();
@@ -418,7 +423,7 @@ impl Executable for UpdateStatement {
         let sets_new = self.sets;
         match storage_util.load(table_name.clone()){
             //check the result of loading
-            Ok((table)) => {
+            Ok(table) => {
                 let rows_old: Vec<RowValue> = table.rows;
                 let columns_old = table.columns;
                 let mut names_old:Vec<String> = Vec::new();
@@ -457,8 +462,14 @@ impl Executable for UpdateStatement {
                     columns:columns_old,
                     rows:rows_new,
                 };
-                storage_util.save(table_name, &table_new);
-                Ok((ExecuteResponse::Message("update final".to_string())))
+                match storage_util.save(table_name.clone(), &table_new) {
+                    Ok(_)=> {
+                        Ok(ExecuteResponse::Message("update final".to_string()))
+                    }
+                    Err(_) => {
+                        Err(QueryExecutionError::TableSavefail(table_name))
+                    }
+                } 
                 
 
             }
