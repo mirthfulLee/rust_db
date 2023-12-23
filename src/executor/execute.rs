@@ -581,3 +581,99 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod tests_create {
+    use super::*;
+    #[test]
+    fn test_check_and_execute_success() {
+
+        let col1 = Column {
+            name:"col1".to_string(),
+            type_info:SqlType::Int
+        };
+        let col2 = Column {
+            name:"col2".to_string(),
+            type_info:SqlType::String
+        };
+        let col3 = Column {
+            name:"col3".to_string(),
+            type_info:SqlType::Unknown
+        };
+
+        let create_statement = CreateStatement {
+            table: "test_table_new".to_string(),
+            columns: vec![col1,col2,col3],  
+        };
+
+        let store_util = StoreUtil::Csv(r"E:\git_commits\rust_db".to_string()); 
+
+        match create_statement.check_and_execute(store_util) {
+            Ok(response) => {
+                assert_eq!(response, ExecuteResponse::Message("save test_table_new successful".to_string()));
+            },
+            Err(_) => {
+                panic!("Expected Ok but got Err");
+            },
+        }
+    }
+
+}
+
+#[cfg(test)]
+mod tests_drop {
+    use super::*;
+    #[test]
+    fn test_check_and_execute_success() {
+
+        let drop_statement = DropStatement {
+            table: "test_table_drop".to_string(),
+        };
+
+        let store_util = StoreUtil::Csv(r"E:\git_commits\rust_db".to_string()); 
+
+        match drop_statement.check_and_execute(store_util) {
+            Ok(response) => {
+                assert_eq!(response, ExecuteResponse::Message("delete test_table_drop successful".to_string()));
+            },
+            Err(_) => {
+                panic!("Expected Ok but got Err");
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_insert {
+    use super::*;
+    #[test]
+    fn test_check_and_execute_success() {
+        let expected = InsertStatement {
+            table: String::from("test_table"),
+            columns: Some(vec![
+                String::from("col1"),
+                String::from("col2"),
+                String::from("col3"),
+            ]),
+            values: RowValue {
+                values: vec![
+                    SqlValue::Int(123),
+                    SqlValue::String(String::from("abc")),
+                    SqlValue::Unknown,
+                ],
+            },
+        };
+
+        let store_util = StoreUtil::Csv(r"E:\git_commits\rust_db".to_string()); 
+
+        match expected.check_and_execute(store_util) {
+            Ok(response) => {
+                assert_eq!(response, ExecuteResponse::Message("save test_table successful".to_string()));
+            },
+            Err(_) => {
+                panic!("Expected Ok but got Err");
+            },
+        }
+    }
+
+}
+

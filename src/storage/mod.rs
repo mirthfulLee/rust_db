@@ -103,7 +103,6 @@ impl StoreUtil {
 
         let path=self.get_path(&name);
         if self.exists(&name) {
-            //delete？
             fs::remove_file(path.clone())?
         }
         //get infos from table
