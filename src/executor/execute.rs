@@ -271,34 +271,51 @@ impl Executable for InsertStatement {
 
 impl Executable for DeleteStatement {
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-        let name = self.table.clone();
-        match storage_util.load(name.clone()){
+        let table_name = self.table.clone();
+        let wc = match self.constraints {
+            Some(wc_tmp) => {
+                wc_tmp
+            },
+            None => {
+                return Err(QueryExecutionError::NoConditionsObtained());
+            }
+        };
+        match storage_util.load(table_name.clone()){
             //check the result of loading
             Ok((table)) => {
-                //pub constraints: Option<WhereConstraint>,
-                match self.constraints {
-                    Some(constraints) => {
-
-                        // }
-                        todo!()
-                    }
-                    
-                    None => {
-                        //value is null
-                        Err(QueryExecutionError::ValueIsNull(name))
+                let rows_old: Vec<RowValue> = table.rows;
+                let columns_old = table.columns;
+                let mut name_old:Vec<String> = Vec::new();
+                for column_old in &columns_old {
+                    name_old.push(column_old.name.clone());
+                }
+                let mut rows_new:Vec<RowValue> = Vec::new();
+                for row_old in rows_old {
+                    if  compare_condition(wc.clone(),&row_old,&name_old) {
+                        continue;
+                    } else {
+                        rows_new.push(row_old.clone());
                     }
                 }
+                let table_new = SqlTable{
+                    columns:columns_old,
+                    rows:rows_new,
+                };
+                storage_util.save(table_name, &table_new);
+                Ok((ExecuteResponse::Message("delete final".to_string())))
+                
+
             }
             Err(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => {
-                    Err(QueryExecutionError::TableNotFound(name))
+                    Err(QueryExecutionError::TableNotFound(table_name))
                 }
                 _ => {
-                    Err(QueryExecutionError::TableOpenfail(name))
+                    Err(QueryExecutionError::TableOpenfail(table_name))
                 }
             }, 
         }
-    }
+        }
 }
 
 impl Executable for SelectStatement {
@@ -381,8 +398,72 @@ impl Executable for SelectStatement {
 impl Executable for UpdateStatement {
     // fn check_and_execute(self) -> Result<ExecuteResponse, QueryExecutionError> 
     fn check_and_execute(self, storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError> {
-        todo!()
-    }
+        let table_name = self.table.clone();
+        let wc = match self.constraints {
+            Some(wc_tmp) => {
+                wc_tmp
+            },
+            None => {
+                return Err(QueryExecutionError::NoConditionsObtained());
+            }
+        };
+        let sets_new = self.sets;
+        match storage_util.load(table_name.clone()){
+            //check the result of loading
+            Ok((table)) => {
+                let rows_old: Vec<RowValue> = table.rows;
+                let columns_old = table.columns;
+                let mut names_old:Vec<String> = Vec::new();
+                for column_old in &columns_old {
+                    names_old.push(column_old.name.clone());
+                }
+                let mut rows_new:Vec<RowValue> = Vec::new();
+                for row_old in rows_old {
+                    if  compare_condition(wc.clone(),&row_old,&names_old) {
+                        let mut row_new:Vec<SqlValue> = Vec::new();
+                        let mut row_old_value = row_old.values.clone();
+                        for name_old in &names_old {
+                            let mut flag =1;
+                            for set_new in &sets_new {
+                                if name_old == &set_new.column {
+                                    flag = 0;
+                                    row_new.push(set_new.value.clone());
+                                    row_old_value.drain(0..1);
+                                    break;
+                                }
+                            }
+                            if flag == 1 {
+                                row_new.push(row_old_value[0].clone());
+                                row_old_value.drain(0..1);
+                            }
+                        }
+                        let row_add = RowValue {
+                            values:row_new
+                        };
+                        rows_new.push(row_add.clone());
+                    } else {
+                        rows_new.push(row_old.clone());
+                    }
+                }
+                let table_new = SqlTable{
+                    columns:columns_old,
+                    rows:rows_new,
+                };
+                storage_util.save(table_name, &table_new);
+                Ok((ExecuteResponse::Message("update final".to_string())))
+                
+
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    Err(QueryExecutionError::TableNotFound(table_name))
+                }
+                _ => {
+                    Err(QueryExecutionError::TableOpenfail(table_name))
+                }
+            }, 
+        }
+        }
 }
 
 impl Executable for SqlQuery {
