@@ -377,7 +377,7 @@ impl<'a> Parse<'a> for DeleteStatement {
                         tag_no_case("delete"),
                         multispace1,
                         tag_no_case("from"),
-                        multispace1
+                        multispace1,
                     )),
                     cut(tuple((identifier, opt(WhereConstraint::parse)))),
                 ),
@@ -614,11 +614,10 @@ mod test_delete_stmt {
                 )),
             )),
         };
-        let parse_result = DeleteStatement::parse_from_raw(
-            "DELETE FROM foo WHERE bar = 123 AND abc <= 'def'",
-        )
-        .unwrap()
-        .1;
+        let parse_result =
+            DeleteStatement::parse_from_raw("DELETE FROM foo WHERE bar = 123 AND abc <= 'def'")
+                .unwrap()
+                .1;
         assert_eq!(parse_result, expected)
     }
 }
@@ -677,8 +676,8 @@ mod test_update_stmt {
 
 #[cfg(test)]
 mod test_query {
-    use miette::GraphicalReportHandler;
     use super::*;
+    use miette::GraphicalReportHandler;
     fn print_error(query: &str) {
         match SqlQuery::parse_format_error(query) {
             Ok(q) => println!("{q:?}"),

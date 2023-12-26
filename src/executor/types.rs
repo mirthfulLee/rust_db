@@ -1,14 +1,14 @@
-use super::super::sql_analyzer::types::*; 
-use super::super::storage::*; 
-use thiserror::Error;
+use super::super::sql_analyzer::types::*;
+use super::super::storage::*;
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// List of column info
 pub type ColumnInfo = Vec<Column>;
 
 /// The struct of data table as well as execute result
-#[derive(Debug, Clone, PartialEq ,Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct SqlTable {
     /// Column info for all columns in the table
     pub columns: ColumnInfo,
@@ -16,19 +16,18 @@ pub struct SqlTable {
     pub rows: Vec<RowValue>,
 }
 
-#[derive(Clone, Debug, PartialEq,Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ExecuteResponse {
     Message(String),
     Count(usize),
-    View(Box<SqlTable>)
+    View(Box<SqlTable>),
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SelectCriteria {
-    pub columns_name:String,
-    pub cmpopt:CmpOpt,
-    pub value:SqlValue,
+    pub columns_name: String,
+    pub cmpopt: CmpOpt,
+    pub value: SqlValue,
 }
 
 /// Errors during query execution
@@ -57,5 +56,8 @@ pub enum QueryExecutionError {
 
 pub trait Executable {
     /// The error should be check error with error message
-    fn check_and_execute(self,storage_util:StoreUtil) -> Result<ExecuteResponse, QueryExecutionError>;
+    fn check_and_execute(
+        self,
+        storage_util: StoreUtil,
+    ) -> Result<ExecuteResponse, QueryExecutionError>;
 }

@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use nom_locate::LocatedSpan;
-use nom::IResult;
-use tabled::Tabled;
 use super::errors::MyParseError;
+use nom::IResult;
+use nom_locate::LocatedSpan;
+use serde::{Deserialize, Serialize};
+use tabled::Tabled;
 
 // Use nom_locate's LocatedSpan as a wrapper around a string input
 pub type Span<'a> = LocatedSpan<&'a str>;
@@ -29,8 +29,7 @@ pub struct Column {
 }
 
 /// Values appears in SQL statement, like insert, update..
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-#[derive(Tabled)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Tabled)]
 pub enum SqlValue {
     String(String),
     Int(i32),
@@ -69,7 +68,6 @@ pub enum WhereConstraint {
     // column, cmp, value
     Constrait(String, CmpOpt, SqlValue),
 }
-
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct SetItem {

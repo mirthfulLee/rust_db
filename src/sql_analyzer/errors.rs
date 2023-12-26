@@ -1,7 +1,7 @@
+use super::types::Span;
 use miette::Diagnostic;
 use nom_supreme::error::{BaseErrorKind, ErrorTree, GenericErrorTree, StackContext};
 use thiserror::Error;
-use super::types::Span;
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("Parse Error")]
