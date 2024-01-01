@@ -14,7 +14,7 @@ use storage::*;
 const HISTORY_FILE: &str = "./data/history.txt";
 
 fn parse_and_execute(line: &str) {
-    let path_root = StoreUtil::Csv(String::from(r"E:\git_commits\rust_db"));
+    let path_root = StoreUtil::Csv(String::from(r"./data/"));
     let parse_result = SqlQuery::parse_format_error(&line);
     match parse_result {
         Ok(query) => {
