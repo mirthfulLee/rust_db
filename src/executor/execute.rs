@@ -310,13 +310,6 @@ impl Executable for SelectStatement {
         storage_util: StoreUtil,
     ) -> Result<ExecuteResponse, QueryExecutionError> {
         let table_name = self.table.clone();
-        let mut rows_mapping: Vec<RowValue> = Vec::new();
-        let wc = match self.constraints {
-            Some(wc_tmp) => wc_tmp,
-            None => {
-                return Err(QueryExecutionError::NoConditionsObtained());
-            }
-        };
         match storage_util.load(table_name.clone()) {
             //check the result of loading
             Ok(table) => {
@@ -326,13 +319,20 @@ impl Executable for SelectStatement {
                     .iter()
                     .map(|column: &Column| column.name.clone())
                     .collect();
-                let rows = table.rows;
-                for row in rows {
-                    match compare_condition(wc.clone(), &row, &names_columns) {
-                        true => rows_mapping.push(row),
-                        false => {}
+                let rows_mapping: Vec<RowValue> = {
+                    match self.constraints {
+                        None => table.rows.clone(),
+                        Some(constraints) => {
+                        let mut rows: Vec<RowValue> = Vec::new();
+                        for row in table.rows {
+                            if compare_condition(constraints.clone(), &row, &names_columns) {
+                                rows.push(row.clone());
+                            }
+                        }
+                        rows
+                        }
                     }
-                }
+                };
                 let mut columns_return: Vec<Column> = Vec::new();
                 let mut rows_return: Vec<RowValue> = Vec::new();
                 let columns_get = self.columns;
