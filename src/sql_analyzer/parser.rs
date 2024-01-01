@@ -258,16 +258,6 @@ impl<'a> Parse<'a> for CmpOpt {
     }
 }
 
-impl<'a> Parse<'a> for BoolOpt {
-    fn parse(input: Span<'a>) -> ParseResult<'a, Self> {
-        alt((
-            map(tag_no_case("and"), |_| Self::And),
-            map(tag_no_case("or"), |_| Self::Or),
-            // map(tag_no_case("not"), |_| Self::Not),
-        ))(input)
-    }
-}
-
 impl<'a> WhereConstraint {
     fn parse_constrait(input: Span<'a>) -> ParseResult<'a, Self> {
         context(
@@ -286,18 +276,34 @@ impl<'a> WhereConstraint {
         )(input)
     }
 
-    fn parse_bin(input: Span<'a>) -> ParseResult<'a, Self> {
+    fn parse_and(input: Span<'a>) -> ParseResult<'a, Self> {
         context(
-            "Constraits combined with `and` or `or`",
+            "Constraits combined with `and`",
             map(
                 tuple((
                     multispace0,
                     Self::parse_constrait,
                     multispace1,
-                    BoolOpt::parse,
+                    tag_no_case("and"),
                     cut(Self::parse_constraits),
                 )),
-                |(_, cons_l, _, opt, cons_r)| Self::Bin(Box::new(cons_l), opt, Box::new(cons_r)),
+                |(_, cons_l, _, _, cons_r)| Self::And(Box::new(cons_l), Box::new(cons_r)),
+            ),
+        )(input)
+    }
+
+    fn parse_or(input: Span<'a>) -> ParseResult<'a, Self> {
+        context(
+            "Constraits combined with `or`",
+            map(
+                tuple((
+                    multispace0,
+                    Self::parse_constrait,
+                    multispace1,
+                    tag_no_case("or"),
+                    cut(Self::parse_constraits),
+                )),
+                |(_, cons_l, _, _, cons_r)| Self::Or(Box::new(cons_l), Box::new(cons_r)),
             ),
         )(input)
     }
@@ -316,7 +322,7 @@ impl<'a> WhereConstraint {
     }
 
     fn parse_constraits(input: Span<'a>) -> ParseResult<'a, Self> {
-        alt((Self::parse_not, Self::parse_bin, Self::parse_constrait))(input)
+        alt((Self::parse_not, Self::parse_and, Self::parse_or, Self::parse_constrait))(input)
     }
 }
 
@@ -570,13 +576,12 @@ mod test_select_stmt {
                 String::from("value"),
                 String::from("*"),
             ],
-            constraints: Some(WhereConstraint::Bin(
+            constraints: Some(WhereConstraint::And(
                 Box::new(WhereConstraint::Constrait(
                     String::from("bar"),
                     CmpOpt::Eq,
                     SqlValue::Int(123),
                 )),
-                BoolOpt::And,
                 Box::new(WhereConstraint::Constrait(
                     String::from("abc"),
                     CmpOpt::Le,
@@ -600,13 +605,12 @@ mod test_delete_stmt {
     fn test_select_stmt2() {
         let expected = DeleteStatement {
             table: String::from("foo"),
-            constraints: Some(WhereConstraint::Bin(
+            constraints: Some(WhereConstraint::And(
                 Box::new(WhereConstraint::Constrait(
                     String::from("bar"),
                     CmpOpt::Eq,
                     SqlValue::Int(123),
                 )),
-                BoolOpt::And,
                 Box::new(WhereConstraint::Constrait(
                     String::from("abc"),
                     CmpOpt::Le,
@@ -650,13 +654,12 @@ mod test_update_stmt {
                     value: SqlValue::String("xyz".into()),
                 },
             ],
-            constraints: Some(WhereConstraint::Bin(
+            constraints: Some(WhereConstraint::And(
                 Box::new(WhereConstraint::Constrait(
                     String::from("abc"),
                     CmpOpt::Lt,
                     SqlValue::Int(123),
                 )),
-                BoolOpt::And,
                 Box::new(WhereConstraint::Constrait(
                     String::from("def"),
                     CmpOpt::Eq,
@@ -718,13 +721,12 @@ mod test_query {
                 String::from("value"),
                 String::from("*"),
             ],
-            constraints: Some(WhereConstraint::Bin(
+            constraints: Some(WhereConstraint::And(
                 Box::new(WhereConstraint::Constrait(
                     String::from("bar"),
                     CmpOpt::Eq,
                     SqlValue::Int(123),
                 )),
-                BoolOpt::And,
                 Box::new(WhereConstraint::Constrait(
                     String::from("abc"),
                     CmpOpt::Le,

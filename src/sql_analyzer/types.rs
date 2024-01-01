@@ -53,17 +53,10 @@ pub enum CmpOpt {
     Ge,
 }
 
-/// Bool operators in SQL statement, common used in where clause
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum BoolOpt {
-    And,
-    Or,
-    Not,
-}
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum WhereConstraint {
-    Bin(Box<WhereConstraint>, BoolOpt, Box<WhereConstraint>),
+    And(Box<WhereConstraint>, Box<WhereConstraint>),
+    Or(Box<WhereConstraint>, Box<WhereConstraint>),
     Not(Box<WhereConstraint>),
     // column, cmp, value
     Constrait(String, CmpOpt, SqlValue),

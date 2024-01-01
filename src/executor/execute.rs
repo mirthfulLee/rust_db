@@ -76,34 +76,26 @@ fn compare_condition(wc: WhereConstraint, record: &RowValue, record_names: &Vec<
                 return false;
             }
         }
-        WhereConstraint::Bin(left_wc, cmpopt, right_wc) => {
-            //Recursive call
-            match cmpopt {
-                BoolOpt::And => {
-                    let new_left_wc: WhereConstraint = *left_wc.clone();
-                    let new_right_wc: WhereConstraint = *right_wc.clone();
-                    if compare_condition(new_left_wc, &record, &record_names)
-                        && compare_condition(new_right_wc, &record, &record_names)
-                    {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
-                BoolOpt::Or => {
-                    let new_left_wc: WhereConstraint = *left_wc.clone();
-                    let new_right_wc: WhereConstraint = *right_wc.clone();
-                    if compare_condition(new_left_wc, &record, &record_names)
-                        || compare_condition(new_right_wc, &record, &record_names)
-                    {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
-                _ => {
-                    return false;
-                }
+        WhereConstraint::And(left_wc, right_wc) => {
+            let new_left_wc: WhereConstraint = *left_wc.clone();
+            let new_right_wc: WhereConstraint = *right_wc.clone();
+            if compare_condition(new_left_wc, &record, &record_names)
+                && compare_condition(new_right_wc, &record, &record_names)
+            {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        WhereConstraint::Or(left_wc, right_wc) => {
+            let new_left_wc: WhereConstraint = *left_wc.clone();
+            let new_right_wc: WhereConstraint = *right_wc.clone();
+            if compare_condition(new_left_wc, &record, &record_names)
+                || compare_condition(new_right_wc, &record, &record_names)
+            {
+                return true;
+            } else {
+                return false;
             }
         }
     }
