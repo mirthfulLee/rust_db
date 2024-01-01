@@ -269,7 +269,7 @@ impl<'a> WhereConstraint {
                     multispace0,
                     CmpOpt::parse,
                     multispace0,
-                    SqlValue::parse,
+                    cut(SqlValue::parse),
                 )),
                 |(_, column, _, op, _, value)| Self::Constrait(column, op, value),
             ),
@@ -322,7 +322,7 @@ impl<'a> WhereConstraint {
     }
 
     fn parse_constraits(input: Span<'a>) -> ParseResult<'a, Self> {
-        alt((Self::parse_not, Self::parse_and, Self::parse_or, Self::parse_constrait))(input)
+        alt((Self::parse_not, Self::parse_and, Self::parse_or, cut(Self::parse_constrait)))(input)
     }
 }
 
