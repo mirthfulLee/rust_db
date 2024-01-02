@@ -52,8 +52,23 @@ fn main() -> Result<()> {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                let _ = rl.add_history_entry(line.as_str());
-                parse_and_execute(line.as_str());
+                // split readline to multiple lines
+                let requests = line.split("\n");
+                let mut exit_flag = false;
+                for request in requests {
+                    if request.is_empty() {
+                        continue;
+                    }
+                    if request == "exit" || request == "quit" {
+                        exit_flag = true;
+                        break;
+                    }
+                    let _ = rl.add_history_entry(request);
+                    parse_and_execute(request);
+                }
+                if exit_flag {
+                    break;
+                }
             }
             Err(ReadlineError::Interrupted) => {
                 break;
